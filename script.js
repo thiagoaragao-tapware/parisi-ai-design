@@ -1,50 +1,339 @@
 const $ = id => document.getElementById(id);
-const raw = window.PARISI_DATA || [];
-const DATA = raw.map((p,i)=>({
-  ...p,
-  id:i,
-  code:String(p.code||p.Product||p.CODE||'').trim(),
-  description:String(p.description||p.name||p.category||'').trim(),
-  location:cleanLocation(p.location),
-  shelf:String(p.shelf||'').trim().toUpperCase(),
-  stock:String(p.availableStock||p.stock||p.qty||'').trim(),
-  status:String(p.stockingStatus||p.shelfStatus||'').trim(),
-  barcode:String(p.barcode||'').trim()
-})).map(p=>({...p, search:[p.code,p.description,p.location,p.shelf,p.stock,p.status,p.barcode,p.category].join(' ').toLowerCase(), norm:normalizeCode(p.code)}));
-let query='', mode='search', results=[], selected=null, cameraStream=null, deferredPrompt=null;
-const LS_BACK='parisi_os_backstock_v1', LS_PICK='parisi_os_picking_v1', LS_FAV='parisi_os_favs_v1', LS_REC='parisi_os_recent_v1';
-function cleanLocation(v){let s=String(v||'').toUpperCase().trim(); if(!s)return ''; return s.replace('/NSW/','').replace('NSW/','').replaceAll('/','').replaceAll(' ','').replace(/[.-]/g,'');}
-function normalizeCode(s){return String(s||'').toUpperCase().replace(/\s+/g,'').replace(/[–—]/g,'-').replace(/[;,]/g,'.').replace(/O(?=\d)/g,'0').replace(/(?<=\d)O/g,'0').replace(/I(?=\d)/g,'1').replace(/[^A-Z0-9.\-\/]/g,'');}
-function esc(s){return String(s??'').replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));}
-function fmt(s){return String(s||'').trim()||'—'}
-function toast(t){const el=$('toast'); el.textContent=t; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),1500)}
-function copy(t){navigator.clipboard?.writeText(String(t||'')); toast('Copied: '+fmt(t));}
-function storeGet(k){try{return JSON.parse(localStorage.getItem(k))||[]}catch{return[]}}
-function storeSet(k,v){localStorage.setItem(k,JSON.stringify(v)); renderWorkPanel(); renderStats();}
-function score(p,q){if(!q)return 1; const l=q.toLowerCase(), n=normalizeCode(q); let s=0; if(p.norm===n)s+=500; if(p.norm.startsWith(n))s+=250; if(p.norm.includes(n))s+=160; if(p.code.toLowerCase().includes(l))s+=120; if(p.description.toLowerCase().includes(l))s+=70; if(p.location.toLowerCase().includes(l))s+=130; if(p.shelf.toLowerCase().includes(l))s+=110; if(p.barcode.toLowerCase().includes(l))s+=100; if(p.search.includes(l))s+=20; return s}
-function highlight(txt){const safe=esc(fmt(txt)); const q=query.trim(); if(!q)return safe; const re=q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); try{return safe.replace(new RegExp('('+re+')','ig'),'<mark>$1</mark>')}catch{return safe}}
-function search(){const q=query.trim(); let arr=DATA; if(q){arr=DATA.map(p=>({...p,_score:score(p,q)})).filter(p=>p._score>0).sort((a,b)=>b._score-a._score||a.code.localeCompare(b.code));} results=arr.slice(0,80); selected=results[0]||null; renderSuggestions(); renderPrimary(); renderResults(); renderStats(); saveRecent(q);}
-function renderSuggestions(){const box=$('suggestions'); if(query.trim().length<1 || !results.length){box.classList.add('hidden'); box.innerHTML=''; return} box.classList.remove('hidden'); box.innerHTML=results.slice(0,9).map(p=>`<div class="suggestion" data-id="${p.id}"><div><strong>${highlight(p.code)}</strong><br><small>${highlight(p.description||p.category)}</small></div><span class="pill-loc">${esc(fmt(p.location))}</span><span class="pill-shelf">${esc(fmt(p.shelf))}</span></div>`).join(''); box.querySelectorAll('.suggestion').forEach(el=>el.onclick=()=>select(+el.dataset.id));}
-function renderPrimary(){const el=$('primaryResult'); if(!selected){el.className='primary-result empty'; el.innerHTML='<div class="empty-copy"><p>No item found.</p><small>Try fewer characters or OCR.</small></div>'; return} const p=selected; el.className='primary-result'; el.innerHTML=`<div class="result-top"><div><h2 class="code-title">${highlight(p.code)}</h2><p class="desc">${highlight(p.description||p.category)}</p><div class="badges"><span class="badge ${p.location?'ok':'bad'}">${p.location?'LOCATION OK':'NO LOCATION'}</span><span class="badge ${p.shelf?'ok':'bad'}">${p.shelf?'SHELF OK':'NO SHELF'}</span><span class="badge">${esc(fmt(p.status))}</span></div></div><button class="action-btn" id="addWorkBtn">+ Add to ${modeLabel()}</button></div><div class="big-loc-grid"><div class="big-box ${p.location?'':'missing'}"><span>LOCATION</span><strong>${highlight(p.location||'NO LOC')}</strong><button class="copy-mini" onclick="copy('${esc(p.location)}')">Copy</button></div><div class="big-box ${p.shelf?'':'missing'}"><span>SHELF</span><strong>${highlight(p.shelf||'NO SHELF')}</strong><button class="copy-mini" onclick="copy('${esc(p.shelf)}')">Copy</button></div></div><div class="info-strip"><div><span>PRODUCT</span><b>${highlight(p.description||p.category)}</b></div><div><span>STOCK</span><b>${esc(fmt(p.stock))}</b></div><div><span>BARCODE</span><b>${esc(fmt(p.barcode))}</b></div><div><span>STATUS</span><b>${esc(fmt(p.status))}</b></div></div><div class="action-row"><button class="action-btn" onclick="copy('${esc(p.code)}')">Copy Code</button><button class="action-btn" onclick="toggleFav(${p.id})">Favorite</button><button class="action-btn" onclick="addCurrentToWork()">Add Current</button></div>`; $('addWorkBtn').onclick=addCurrentToWork;}
-function renderResults(){$('resultsGrid').innerHTML=results.slice(1,19).map(p=>`<article class="result-card" data-id="${p.id}"><h3>${highlight(p.code)}</h3><p>${highlight(p.description||p.category)}</p><div class="mini-grid"><div><span>LOCATION</span><b>${esc(fmt(p.location))}</b></div><div><span>SHELF</span><b>${esc(fmt(p.shelf))}</b></div></div></article>`).join(''); document.querySelectorAll('.result-card').forEach(c=>c.onclick=()=>select(+c.dataset.id));}
-function select(id){const p=DATA.find(x=>x.id===id); if(!p)return; selected=p; query=p.code; $('searchInput').value=p.code; $('suggestions').classList.add('hidden'); renderPrimary(); renderResults(); saveRecent(p.code); if(mode==='receiving'||mode==='backstock') addToWork(p);}
-function modeLabel(){return ({search:'Work List',backstock:'Back to Stock',picking:'Picking',stocktake:'Stocktake',receiving:'Receiving'})[mode]}
-function currentKey(){return mode==='picking'?LS_PICK:LS_BACK}
-function addCurrentToWork(){if(selected)addToWork(selected)}
-function addToWork(p){const k=currentKey(); const list=storeGet(k); const row={id:p.id,code:p.code,description:p.description,location:p.location,shelf:p.shelf,stock:p.stock,time:new Date().toLocaleTimeString()}; if(!list.some(x=>x.code===row.code && x.time===row.time)) storeSet(k,[row,...list].slice(0,400)); toast('Added: '+p.code)}
-function removeWork(k,i){const list=storeGet(k); list.splice(i,1); storeSet(k,list)}
-function sortLoc(a){const s=a.location||'ZZZ999'; const m=s.match(/^([A-Z]+)(\d+)/); return m?[m[1],String(m[2]).padStart(4,'0')].join(''):s}
-function grouped(list){const sorted=[...list].sort((a,b)=>sortLoc(a).localeCompare(sortLoc(b))||a.code.localeCompare(b.code)); return sorted.reduce((acc,x)=>{const key=x.location||'NO LOCATION'; (acc[key] ||= []).push(x); return acc},{})}
-function renderWorkPanel(){const el=$('workPanel'); if(mode==='search'){el.classList.add('hidden'); return} el.classList.remove('hidden'); const k=currentKey(), list=storeGet(k), groups=grouped(list); const title=modeLabel(); el.innerHTML=`<div class="panel-head"><div><h2>${title}</h2><p>${modeHelp()}</p></div><div><button class="ghost" id="clearWork">Clear</button><button class="gold-btn" id="exportWork">Export</button></div></div>${!list.length?'<p class="status-line">No items yet. Search or OCR scan products to build the list.</p>':Object.entries(groups).map(([loc,items])=>`<div class="route-group"><div class="route-head"><span>${esc(loc)}</span><span>${items.length} item(s)</span></div>${items.map((p,i)=>`<div class="route-item"><div><b>${esc(p.code)}</b><p>${esc(p.description)} · Shelf ${esc(fmt(p.shelf))} · ${esc(p.time||'')}</p></div><button class="ghost" onclick="removeWork('${k}',${list.indexOf(p)})">Done</button></div>`).join('')}</div>`).join('')}`; $('clearWork').onclick=()=>storeSet(k,[]); $('exportWork').onclick=()=>exportList(list,title.replaceAll(' ','-').toLowerCase()+'.csv');}
-function modeHelp(){return {backstock:'Scan multiple items. The system groups them by location to reduce walking.',picking:'Build a picking route sorted by warehouse location.',stocktake:'Scan items while checking stock and location.',receiving:'Scan products and instantly see where they go.'}[mode]||''}
-function exportList(list,name){const csv=['Code,Description,Location,Shelf,Stock,Time',...list.map(p=>[p.code,p.description,p.location,p.shelf,p.stock,p.time].map(x=>'"'+String(x||'').replaceAll('"','""')+'"').join(','))].join('\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download=name; a.click();}
-function toggleFav(id){const fav=storeGet(LS_FAV); const p=DATA.find(x=>x.id===id); if(!p)return; const i=fav.findIndex(x=>x.code===p.code); if(i>=0){fav.splice(i,1); toast('Removed favorite')}else{fav.unshift({code:p.code,description:p.description,location:p.location,shelf:p.shelf}); toast('Favorite saved')} storeSet(LS_FAV,fav.slice(0,40));}
-function saveRecent(q){if(!q||q.length<2)return; let rec=storeGet(LS_REC).filter(x=>x!==q); rec.unshift(q); localStorage.setItem(LS_REC,JSON.stringify(rec.slice(0,12)));}
-function renderStats(){$('totalProducts').textContent=DATA.length.toLocaleString(); $('withLocation').textContent=DATA.filter(p=>p.location).length.toLocaleString(); $('noLocation').textContent=DATA.filter(p=>!p.location).length.toLocaleString(); $('workCount').textContent=(storeGet(LS_BACK).length+storeGet(LS_PICK).length).toLocaleString();}
-function bind(){ $('searchInput').addEventListener('input',e=>{query=e.target.value; search()}); $('clearBtn').onclick=()=>{query=''; $('searchInput').value=''; search(); $('searchInput').focus()}; document.querySelectorAll('.mode').forEach(b=>b.onclick=()=>{mode=b.dataset.mode; document.querySelectorAll('.mode').forEach(x=>x.classList.toggle('active',x===b)); renderPrimary(); renderWorkPanel();}); $('ocrBtn').onclick=startOCR; $('closeOcr').onclick=()=>{$('ocrDialog').close(); stopOCR()}; $('readTextBtn').onclick=captureOCR; window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;$('installBtn').classList.remove('hidden')}); $('installBtn').onclick=()=>deferredPrompt?.prompt(); if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});}
-async function startOCR(){ $('ocrDialog').showModal(); $('ocrStatus').textContent='Opening camera...'; try{cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}}); $('camera').srcObject=cameraStream; $('ocrStatus').textContent='Camera ready. Center the code and tap Read Text.'}catch(e){$('ocrStatus').textContent='Camera error: '+e.message}}
-function stopOCR(){if(cameraStream){cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null} $('camera').srcObject=null}
-async function captureOCR(){const video=$('camera'), canvas=$('captureCanvas'), status=$('ocrStatus'); if(!video.videoWidth){status.textContent='Camera not ready.';return} canvas.width=video.videoWidth; canvas.height=video.videoHeight; canvas.getContext('2d').drawImage(video,0,0); status.textContent='Reading text...'; try{const res=await Tesseract.recognize(canvas,'eng',{logger:m=>{if(m.status)status.textContent=`OCR: ${m.status} ${m.progress?Math.round(m.progress*100)+'%':''}`}}); const candidates=extractCandidates(res.data.text); renderOcr(candidates); status.textContent=candidates.length?'Choose the correct code.':'No product code found. Try closer and brighter.'}catch(e){status.textContent='OCR error: '+e.message}}
-function extractCandidates(text){const raw=String(text||'').toUpperCase().replace(/\s+/g,' '); let matches=raw.match(/[A-Z0-9]{1,5}[.\-][A-Z0-9.\-\/]{3,}/g)||[]; matches=matches.map(normalizeCode); const known=[]; for(const m of matches){const hit=DATA.find(p=>p.norm===m)||DATA.find(p=>p.norm.includes(m)||m.includes(p.norm)); if(hit&&!known.some(x=>x.id===hit.id))known.push(hit)} return known.slice(0,10)}
-function renderOcr(list){const box=$('ocrCandidates'); box.innerHTML=list.map(p=>`<div class="ocr-candidate"><div><b>${esc(p.code)}</b><br><small>${esc(p.description)} · ${esc(fmt(p.location))} · ${esc(fmt(p.shelf))}</small></div><button class="gold-btn" data-id="${p.id}">Use</button></div>`).join(''); box.querySelectorAll('button').forEach(b=>b.onclick=()=>{select(+b.dataset.id); $('ocrDialog').close(); stopOCR()});}
-bind(); search(); renderWorkPanel(); renderStats();
+const rawData = window.PARISI_DATA || [];
+const STORAGE_KEY = 'parisi_back_to_stock_clean_v1';
+let query = '';
+let selectedItem = null;
+let cameraStream = null;
+
+function fmt(value, fallback = '—') {
+  const s = String(value ?? '').trim();
+  return s ? s : fallback;
+}
+function escapeHtml(value) {
+  return fmt(value, '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
+}
+function normalizeCode(value) {
+  return String(value || '')
+    .toUpperCase()
+    .replace(/\s+/g, '')
+    .replace(/[–—]/g, '-')
+    .replace(/,/g, '.')
+    .replace(/O(?=\d)/g, '0')
+    .replace(/(?<=\d)O/g, '0')
+    .replace(/I(?=\d)/g, '1')
+    .replace(/(?<=\d)I/g, '1')
+    .replace(/[^A-Z0-9.\-\/]/g, '');
+}
+function cleanLocation(value) {
+  let s = String(value || '').trim().toUpperCase();
+  if (!s) return '';
+  s = s.replace(/^\/NSW\//, '').replace(/^NSW\//, '').replace(/\s+/g, '');
+  s = s.replace(/[^A-Z0-9.]/g, '');
+  const m = s.match(/^([A-Z])(\d)(?:\.)?(\d{1,2})$/);
+  if (m) return `${m[1]}${m[2]}${m[3].padStart(2,'0')}`;
+  const m2 = s.match(/^([A-Z])(\d{2})(\d)$/);
+  if (m2) return `${m2[1]}${m2[2]}${m2[3]}`;
+  return s.replace('.', '');
+}
+function normalizeBarcode(value) {
+  const s = String(value || '').trim();
+  if (!s) return '';
+  return s;
+}
+function hasUsableLocationOrShelf(item) {
+  return Boolean(item.location || item.shelf);
+}
+const data = rawData.map((item, index) => {
+  const code = fmt(item.code || item.Product || item.CODE, '');
+  const description = fmt(item.description || item.name || item.category, '');
+  const location = cleanLocation(item.location || item.LOCATION || item.Location);
+  const shelf = fmt(item.shelf || item.SHELF || item.Column1, '').toUpperCase();
+  const availableStock = fmt(item.availableStock || item.stock || item.Stock, '');
+  const stockingStatus = fmt(item.stockingStatus || item.status || item.Status || item.shelfStatus, '');
+  const barcode = normalizeBarcode(item.barcode || item.Barcode || item.BARCODE);
+  const section = fmt(item.section || item.Section, '');
+  return {
+    ...item,
+    id: index,
+    code,
+    description,
+    location,
+    shelf,
+    availableStock,
+    stockingStatus,
+    barcode,
+    section,
+    searchText: [code, description, location, shelf, barcode, section, stockingStatus].join(' ').toLowerCase(),
+    normalizedCode: normalizeCode(code).toLowerCase()
+  };
+}).filter(hasUsableLocationOrShelf);
+
+function scoreItem(item, q) {
+  if (!q) return 0;
+  const lower = q.toLowerCase();
+  const norm = normalizeCode(q).toLowerCase();
+  const code = item.code.toLowerCase();
+  let score = 0;
+  if (code === lower || item.normalizedCode === norm) score += 1000;
+  if (code.startsWith(lower) || item.normalizedCode.startsWith(norm)) score += 550;
+  if (code.includes(lower) || item.normalizedCode.includes(norm)) score += 350;
+  if (item.location.toLowerCase() === lower) score += 460;
+  if (item.location.toLowerCase().startsWith(lower)) score += 280;
+  if (item.shelf.toLowerCase() === lower) score += 420;
+  if (item.shelf.toLowerCase().startsWith(lower)) score += 250;
+  if (item.description.toLowerCase().includes(lower)) score += 150;
+  if (item.barcode && item.barcode.toLowerCase().includes(lower)) score += 140;
+  if (item.searchText.includes(lower)) score += 40;
+  return score;
+}
+function getMatches() {
+  const q = query.trim();
+  if (!q) return [];
+  return data.map(item => ({...item, _score: scoreItem(item, q)}))
+    .filter(item => item._score > 0)
+    .sort((a,b) => b._score - a._score || a.code.localeCompare(b.code))
+    .slice(0, 12);
+}
+function highlight(text) {
+  const safe = escapeHtml(text);
+  const q = query.trim();
+  if (!q) return safe;
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  try { return safe.replace(new RegExp(`(${escaped})`, 'ig'), '<span class="match">$1</span>'); }
+  catch { return safe; }
+}
+function renderSuggestions() {
+  const box = $('suggestions');
+  const matches = getMatches();
+  if (!query.trim() || !matches.length) {
+    box.hidden = true;
+    box.innerHTML = '';
+    return;
+  }
+  box.hidden = false;
+  box.innerHTML = matches.map(item => `
+    <button class="suggestion" data-id="${item.id}">
+      <span>
+        <strong>${highlight(item.code)}</strong>
+        <small>${highlight(item.description || 'No description')}</small>
+      </span>
+      <span class="suggestion-loc">${escapeHtml(item.location || 'NO LOC')}<span class="suggestion-shelf">${escapeHtml(item.shelf || 'NO SHELF')}</span></span>
+    </button>
+  `).join('');
+}
+function showHome() {
+  $('home').hidden = false;
+  $('resultScreen').hidden = true;
+  $('backstockScreen').hidden = true;
+  renderQueueMini();
+  setTimeout(() => $('searchInput').focus(), 80);
+}
+function showResult(item) {
+  selectedItem = item;
+  $('home').hidden = true;
+  $('resultScreen').hidden = false;
+  $('backstockScreen').hidden = true;
+  $('resultCode').textContent = item.code;
+  $('resultName').textContent = item.description || 'No description';
+  $('resultLocation').textContent = item.location || 'NO LOC';
+  $('resultShelf').textContent = item.shelf || 'NO SHELF';
+  $('resultStock').textContent = fmt(item.availableStock);
+  $('resultStatus').textContent = fmt(item.stockingStatus);
+  $('resultBarcode').textContent = fmt(item.barcode);
+  $('resultSection').textContent = fmt(item.section);
+  vibrate(12);
+}
+function selectById(id) {
+  const item = data.find(x => String(x.id) === String(id));
+  if (!item) return;
+  $('suggestions').hidden = true;
+  $('searchInput').value = item.code;
+  query = item.code;
+  showResult(item);
+}
+function toast(message) {
+  const el = $('toast');
+  el.textContent = message;
+  el.classList.add('show');
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => el.classList.remove('show'), 1500);
+}
+function vibrate(ms = 10) {
+  if (navigator.vibrate) navigator.vibrate(ms);
+}
+async function copy(text, label) {
+  if (!text) return;
+  try { await navigator.clipboard.writeText(text); toast(`${label} copied`); vibrate(8); }
+  catch { toast('Copy failed'); }
+}
+function getQueue() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+  catch { return []; }
+}
+function setQueue(list) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  renderQueueMini();
+  renderBackstock();
+}
+function addCurrentToBackstock() {
+  if (!selectedItem) return;
+  const list = getQueue();
+  const row = {
+    uid: `${selectedItem.id}-${Date.now()}`,
+    id: selectedItem.id,
+    code: selectedItem.code,
+    description: selectedItem.description,
+    location: selectedItem.location,
+    shelf: selectedItem.shelf,
+    stock: selectedItem.availableStock,
+    time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+  };
+  setQueue([row, ...list]);
+  toast('Added to Back to Stock');
+  vibrate(20);
+}
+function locationOrder(loc) {
+  const s = cleanLocation(loc);
+  const m = s.match(/^([A-Z])(\d)(\d{2})$/);
+  if (!m) return s;
+  return `${m[1]}-${m[2].padStart(2,'0')}-${m[3]}`;
+}
+function groupQueue() {
+  const groups = new Map();
+  getQueue().forEach(item => {
+    const key = item.location || 'NO LOCATION';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  });
+  return [...groups.entries()].sort((a,b) => locationOrder(a[0]).localeCompare(locationOrder(b[0])));
+}
+function renderQueueMini() {
+  const count = getQueue().length;
+  $('backstockMini').textContent = `${count} item${count === 1 ? '' : 's'} queued`;
+}
+function renderBackstock() {
+  const groups = groupQueue();
+  const total = getQueue().length;
+  $('backstockCount').textContent = `${total} item${total === 1 ? '' : 's'} grouped by location.`;
+  const holder = $('backstockGroups');
+  if (!total) {
+    holder.innerHTML = `<div class="empty-queue">Search an item and press <strong>BACK TO STOCK</strong> to build your grouped list.</div>`;
+    return;
+  }
+  holder.innerHTML = groups.map(([loc, items]) => `
+    <article class="group">
+      <div class="group-head"><strong>${escapeHtml(loc)}</strong><small>${items.length} item${items.length === 1 ? '' : 's'}</small></div>
+      ${items.map(item => `
+        <div class="queue-item">
+          <div><h4>${escapeHtml(item.code)}</h4><p>${escapeHtml(item.description)} · Shelf ${escapeHtml(item.shelf || 'NO SHELF')} · ${escapeHtml(item.time)}</p></div>
+          <button class="remove-item" data-uid="${escapeHtml(item.uid)}">Done</button>
+        </div>`).join('')}
+    </article>
+  `).join('');
+}
+function removeQueueItem(uid) {
+  setQueue(getQueue().filter(item => item.uid !== uid));
+  toast('Item completed');
+}
+function exportBackstock() {
+  const list = getQueue();
+  if (!list.length) return toast('Queue is empty');
+  const rows = [['Location','Shelf','Code','Description','Stock','Time'], ...list.map(i => [i.location, i.shelf, i.code, i.description, i.stock, i.time])];
+  const csv = rows.map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+  a.download = 'parisi-back-to-stock.csv';
+  a.click();
+}
+async function startOCR() {
+  const dialog = $('ocrDialog');
+  dialog.showModal();
+  $('ocrStatus').textContent = 'Opening camera...';
+  $('ocrCandidates').innerHTML = '';
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    $('camera').srcObject = cameraStream;
+    $('ocrStatus').textContent = 'Camera ready. Center the product code and tap READ TEXT.';
+  } catch (error) {
+    $('ocrStatus').textContent = `Camera error: ${error.message}`;
+  }
+}
+function stopOCR() {
+  if (cameraStream) cameraStream.getTracks().forEach(track => track.stop());
+  cameraStream = null;
+  $('camera').srcObject = null;
+}
+function extractCandidates(text) {
+  const cleaned = String(text || '').toUpperCase().replace(/\s+/g, ' ');
+  const raw = cleaned.match(/[A-Z0-9]{1,5}[.\-][A-Z0-9.\-\/]{2,}/g) || [];
+  const expanded = raw.map(normalizeCode).filter(Boolean);
+  return [...new Set(expanded)].slice(0, 8);
+}
+async function readText() {
+  const video = $('camera');
+  const canvas = $('captureCanvas');
+  const status = $('ocrStatus');
+  if (!video.videoWidth) return status.textContent = 'Camera is not ready yet.';
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  status.textContent = 'Reading text...';
+  $('ocrCandidates').innerHTML = '';
+  try {
+    const result = await Tesseract.recognize(canvas, 'eng', {
+      logger: m => {
+        if (m.status) status.textContent = `OCR: ${m.status}${m.progress ? ` ${Math.round(m.progress * 100)}%` : ''}`;
+      }
+    });
+    const candidates = extractCandidates(result.data.text);
+    if (!candidates.length) {
+      status.textContent = 'No product code detected. Try closer, brighter and flatter.';
+      return;
+    }
+    status.textContent = 'Choose the detected code:';
+    $('ocrCandidates').innerHTML = candidates.map(c => `<button data-code="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('');
+  } catch (error) {
+    status.textContent = `OCR error: ${error.message}`;
+  }
+}
+function searchCandidate(code) {
+  query = code;
+  $('searchInput').value = code;
+  const found = getMatches()[0];
+  $('ocrDialog').close();
+  stopOCR();
+  if (found) showResult(found);
+  else { showHome(); renderSuggestions(); toast('No matching product found'); }
+}
+
+$('searchInput').addEventListener('input', e => { query = e.target.value; renderSuggestions(); });
+$('searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const first = getMatches()[0];
+    if (first) selectById(first.id);
+  }
+});
+$('suggestions').addEventListener('click', e => {
+  const btn = e.target.closest('.suggestion');
+  if (btn) selectById(btn.dataset.id);
+});
+$('clearBtn').addEventListener('click', () => { query = ''; $('searchInput').value = ''; $('suggestions').hidden = true; $('searchInput').focus(); });
+$('backHome').addEventListener('click', showHome);
+$('resultClose').addEventListener('click', showHome);
+$('copyLocation').addEventListener('click', () => copy(selectedItem?.location, 'Location'));
+$('copyShelf').addEventListener('click', () => copy(selectedItem?.shelf, 'Shelf'));
+$('addToBackstock').addEventListener('click', addCurrentToBackstock);
+$('openBackstock').addEventListener('click', () => { $('home').hidden = true; $('resultScreen').hidden = true; $('backstockScreen').hidden = false; renderBackstock(); });
+$('closeBackstock').addEventListener('click', showHome);
+$('clearBackstock').addEventListener('click', () => { if (confirm('Clear Back to Stock queue?')) setQueue([]); });
+$('exportBackstock').addEventListener('click', exportBackstock);
+$('backstockGroups').addEventListener('click', e => { const btn = e.target.closest('.remove-item'); if (btn) removeQueueItem(btn.dataset.uid); });
+$('ocrBtn').addEventListener('click', startOCR);
+$('closeOcr').addEventListener('click', () => { $('ocrDialog').close(); stopOCR(); });
+$('ocrDialog').addEventListener('close', stopOCR);
+$('readText').addEventListener('click', readText);
+$('ocrCandidates').addEventListener('click', e => { const btn = e.target.closest('button[data-code]'); if (btn) searchCandidate(btn.dataset.code); });
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+renderQueueMini();
+renderBackstock();
