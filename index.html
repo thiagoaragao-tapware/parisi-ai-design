@@ -3,94 +3,100 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#080604" />
+  <meta name="theme-color" content="#050403" />
   <title>PARISI - Tapware Finder</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="grain"></div>
-  <div class="lux-glow glow-a"></div>
-  <div class="lux-glow glow-b"></div>
-
-  <main class="app-shell">
-    <section id="home" class="home-screen">
-      <div class="brand-lockup">
-        <div class="brand-mark">P</div>
-        <p class="overline">Scan · Locate · Store</p>
+  <div class="texture"></div>
+  <main class="app">
+    <section id="home" class="home">
+      <header class="brand">
         <h1>PARISI</h1>
-        <h2>TAPWARE FINDER</h2>
-      </div>
+        <p>TAPWARE FINDER</p>
+      </header>
 
-      <div class="search-card">
-        <div class="search-row">
-          <span class="search-icon">⌕</span>
-          <input id="searchInput" type="search" autocomplete="off" autocapitalize="characters" placeholder="Search product code, name, location or shelf" />
-          <button id="ocrBtn" class="icon-btn" aria-label="OCR scan">OCR</button>
-          <button id="clearBtn" class="icon-btn subtle" aria-label="Clear search">×</button>
+      <section class="search-block">
+        <div class="search-line">
+          <span class="mag">⌕</span>
+          <input id="searchInput" type="search" autocomplete="off" autocapitalize="characters" placeholder="Search code, name, location or shelf" />
+          <button id="searchBtn" class="go-btn" aria-label="Search">→</button>
+          <button id="clearBtn" class="clear-btn" aria-label="Clear">×</button>
+        </div>
+        <div class="actions-row">
+          <button id="ocrBtn" class="ocr-btn">OCR</button>
         </div>
         <div id="suggestions" class="suggestions" hidden></div>
-      </div>
+      </section>
 
-      <section class="workspace-strip">
-        <p class="section-label">Workspace</p>
-        <button id="openBackstock" class="workspace-card">
-          <span class="workspace-icon">□</span>
-          <span>
-            <strong>Back to Stock</strong>
-            <small id="backstockMini">0 items queued</small>
-          </span>
+      <section class="workspace">
+        <p class="label">Workspace</p>
+        <button id="openBackstock" class="workspace-row">
+          <span>Back to Stock</span>
+          <small id="backstockMini">0 items queued</small>
           <b>→</b>
         </button>
       </section>
     </section>
 
-    <section id="resultScreen" class="result-screen" hidden>
-      <button id="backHome" class="text-btn">← Search</button>
-      <article class="result-panel">
-        <div class="result-topline">
-          <span class="overline">Selected item</span>
-          <button id="resultClose" class="round-btn">×</button>
-        </div>
-        <h3 id="resultCode"></h3>
-        <p id="resultName"></p>
+    <section id="resultScreen" class="result" hidden>
+      <nav class="topbar">
+        <button id="backHome" class="nav-btn">←</button>
+        <span>PARISI</span>
+        <button id="resultClose" class="nav-btn">×</button>
+      </nav>
 
-        <div class="hero-locations">
-          <button id="copyLocation" class="hero-box">
-            <span>LOCATION</span>
-            <strong id="resultLocation"></strong>
-            <small>Tap to copy</small>
-          </button>
-          <button id="copyShelf" class="hero-box">
-            <span>SHELF</span>
+      <div class="notice">Found an error or missing info? Please let <strong>Thiago</strong> know.</div>
+
+      <p class="found">1 product found</p>
+
+      <article class="item-panel">
+        <div class="item-head">
+          <h2 id="resultCode"></h2>
+          <p id="resultName"></p>
+        </div>
+
+        <button id="copyLocation" class="location-strip">
+          <span>Location</span>
+          <strong id="resultLocation"></strong>
+          <small>Tap to copy</small>
+        </button>
+
+        <div class="info-grid">
+          <button id="copyShelf" class="info-cell copy-cell">
+            <span>Shelf</span>
             <strong id="resultShelf"></strong>
             <small>Tap to copy</small>
           </button>
+          <div id="stockCell" class="info-cell">
+            <span>Available Stock</span>
+            <strong id="resultStock"></strong>
+            <em id="stockBadge"></em>
+          </div>
+          <div id="statusCell" class="info-cell">
+            <span>Stocking Status</span>
+            <strong id="resultStatus"></strong>
+          </div>
+          <div class="info-cell">
+            <span>Category</span>
+            <strong id="resultSection"></strong>
+          </div>
         </div>
 
-        <button id="addToBackstock" class="primary-action">BACK TO STOCK</button>
-
-        <div class="compact-details">
-          <div><span>Stock</span><strong id="resultStock"></strong></div>
-          <div><span>Status</span><strong id="resultStatus"></strong></div>
-          <div><span>Barcode</span><strong id="resultBarcode"></strong></div>
-          <div><span>Section</span><strong id="resultSection"></strong></div>
-        </div>
+        <button id="addToBackstock" class="backstock-action">Back to Stock</button>
       </article>
     </section>
 
-    <section id="backstockScreen" class="workspace-screen" hidden>
-      <div class="screen-head">
-        <button id="closeBackstock" class="text-btn">← Home</button>
-        <button id="clearBackstock" class="text-btn danger">Clear</button>
-      </div>
-      <div class="workspace-title">
-        <p class="overline">Workspace</p>
-        <h2>Back to Stock</h2>
-        <p id="backstockCount">0 items grouped by location.</p>
-      </div>
+    <section id="backstockScreen" class="backstock" hidden>
+      <nav class="topbar">
+        <button id="closeBackstock" class="nav-btn">←</button>
+        <span>BACK TO STOCK</span>
+        <button id="clearBackstock" class="nav-btn danger">Clear</button>
+      </nav>
+      <p id="backstockCount" class="queue-count">0 items grouped by location.</p>
       <div id="backstockGroups" class="location-groups"></div>
-      <button id="exportBackstock" class="secondary-action">Export CSV</button>
+      <button id="exportBackstock" class="export-btn">Export CSV</button>
     </section>
   </main>
 
@@ -98,13 +104,13 @@
 
   <dialog id="ocrDialog" class="ocr-dialog">
     <div class="dialog-inner">
-      <button id="closeOcr" class="round-btn close-dialog">×</button>
-      <p class="overline">OCR Text Scan</p>
+      <button id="closeOcr" class="nav-btn dialog-close">×</button>
+      <p class="label">OCR Text Scan</p>
       <h2>Read item code</h2>
-      <p class="ocr-note">Point the camera at the printed product code. OCR is best with good light and a flat label.</p>
+      <p class="ocr-note">Point the camera at the printed product code, then tap READ TEXT.</p>
       <video id="camera" autoplay playsinline muted></video>
       <canvas id="captureCanvas" hidden></canvas>
-      <button id="readText" class="primary-action">READ TEXT</button>
+      <button id="readText" class="backstock-action">Read Text</button>
       <p id="ocrStatus" class="ocr-status">Camera not started.</p>
       <div id="ocrCandidates" class="ocr-candidates"></div>
     </div>

@@ -1,6 +1,6 @@
 const $ = id => document.getElementById(id);
 const rawData = window.PARISI_DATA || [];
-const STORAGE_KEY = 'parisi_back_to_stock_clean_v1';
+const STORAGE_KEY = 'parisi_back_to_stock_minimal_v9';
 let query = '';
 let selectedItem = null;
 let cameraStream = null;
@@ -121,7 +121,35 @@ function renderSuggestions() {
     </button>
   `).join('');
 }
+
+function numericStock(item) {
+  const raw = String(item.availableStock ?? '').replace(/,/g, '').trim();
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+function applyStockVisuals(item) {
+  const stockCell = $('stockCell');
+  const statusCell = $('statusCell');
+  const badge = $('stockBadge');
+  stockCell.classList.remove('stock-ok','stock-bad');
+  statusCell.classList.remove('status-ok','status-bad');
+  const n = numericStock(item);
+  const status = String(item.stockingStatus || '').toLowerCase();
+  const available = n > 0 && !status.includes('discontinued');
+  stockCell.classList.add(available ? 'stock-ok' : 'stock-bad');
+  statusCell.classList.add(available ? 'status-ok' : 'status-bad');
+  badge.textContent = available ? 'In stock' : 'No stock';
+  $('resultStock').textContent = `${n} unit${Math.abs(n) === 1 ? '' : 's'}`;
+  if (!item.stockingStatus) $('resultStatus').textContent = available ? 'Stocked' : 'No stock';
+}
+function runSearch() {
+  const first = getMatches()[0];
+  if (first) selectById(first.id);
+  else toast('No matching product found');
+}
+
 function showHome() {
+  document.body.classList.remove('result-mode','backstock-mode');
   $('home').hidden = false;
   $('resultScreen').hidden = true;
   $('backstockScreen').hidden = true;
@@ -130,6 +158,9 @@ function showHome() {
 }
 function showResult(item) {
   selectedItem = item;
+  document.body.classList.add('result-mode');
+  document.body.classList.remove('backstock-mode');
+  window.scrollTo({top:0, left:0, behavior:'instant'});
   $('home').hidden = true;
   $('resultScreen').hidden = false;
   $('backstockScreen').hidden = true;
@@ -139,8 +170,8 @@ function showResult(item) {
   $('resultShelf').textContent = item.shelf || 'NO SHELF';
   $('resultStock').textContent = fmt(item.availableStock);
   $('resultStatus').textContent = fmt(item.stockingStatus);
-  $('resultBarcode').textContent = fmt(item.barcode);
-  $('resultSection').textContent = fmt(item.section);
+  $('resultSection').textContent = fmt(item.section || item.category || 'Tapware');
+  applyStockVisuals(item);
   vibrate(12);
 }
 function selectById(id) {
@@ -308,22 +339,20 @@ function searchCandidate(code) {
 
 $('searchInput').addEventListener('input', e => { query = e.target.value; renderSuggestions(); });
 $('searchInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    const first = getMatches()[0];
-    if (first) selectById(first.id);
-  }
+  if (e.key === 'Enter') runSearch();
 });
 $('suggestions').addEventListener('click', e => {
   const btn = e.target.closest('.suggestion');
   if (btn) selectById(btn.dataset.id);
 });
+$('searchBtn').addEventListener('click', runSearch);
 $('clearBtn').addEventListener('click', () => { query = ''; $('searchInput').value = ''; $('suggestions').hidden = true; $('searchInput').focus(); });
 $('backHome').addEventListener('click', showHome);
 $('resultClose').addEventListener('click', showHome);
 $('copyLocation').addEventListener('click', () => copy(selectedItem?.location, 'Location'));
 $('copyShelf').addEventListener('click', () => copy(selectedItem?.shelf, 'Shelf'));
 $('addToBackstock').addEventListener('click', addCurrentToBackstock);
-$('openBackstock').addEventListener('click', () => { $('home').hidden = true; $('resultScreen').hidden = true; $('backstockScreen').hidden = false; renderBackstock(); });
+$('openBackstock').addEventListener('click', () => { document.body.classList.add('backstock-mode'); document.body.classList.remove('result-mode'); $('home').hidden = true; $('resultScreen').hidden = true; $('backstockScreen').hidden = false; renderBackstock(); });
 $('closeBackstock').addEventListener('click', showHome);
 $('clearBackstock').addEventListener('click', () => { if (confirm('Clear Back to Stock queue?')) setQueue([]); });
 $('exportBackstock').addEventListener('click', exportBackstock);
