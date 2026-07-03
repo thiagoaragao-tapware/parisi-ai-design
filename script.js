@@ -1,133 +1,50 @@
-const $ = (id) => document.getElementById(id);
-const rawData = window.PARISI_DATA || [];
-const data = rawData.map((item, index) => ({
-  ...item,
-  id: index,
-  code: item.code || '',
-  description: item.description || item.category || '',
-  searchText: [item.code,item.description,item.category,item.barcode,item.location,item.shelf,item.section,item.stockingStatus].join(' ').toLowerCase()
-}));
-let query = '';
-let filter = 'all';
-let results = data.slice(0, 24);
-let selected = null;
-const LS_RECENT = 'parisi_recent_v3';
-const getRecent = () => { try { return JSON.parse(localStorage.getItem(LS_RECENT)) || [] } catch { return [] } };
-const setRecent = (v) => localStorage.setItem(LS_RECENT, JSON.stringify(v));
-const fmt = (v) => (v === undefined || v === null || String(v).trim() === '' ? '—' : String(v));
-const esc = (s) => fmt(s).replace(/[&<>'"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));
-const clean = (s) => String(s || '').replace(/'/g, "\\'");
-function toast(text){ const t=$('toast'); t.textContent=text; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 1200); }
-function copyText(text){ navigator.clipboard?.writeText(text || ''); toast('Copied: ' + fmt(text)); event?.stopPropagation?.(); }
-function addRecent(text){ text = String(text || '').trim(); if(text.length < 2) return; const r = [text, ...getRecent().filter(x => x.toLowerCase() !== text.toLowerCase())].slice(0, 9); setRecent(r); renderMiniStats(); }
-function highlight(text){ const safe = esc(text); if(!query.trim()) return safe; const q = query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); return safe.replace(new RegExp(`(${q})`, 'ig'), '<mark>$1</mark>'); }
-function hasStock(v){ return !isNaN(parseFloat(v)) && parseFloat(v) > 0; }
-function passesFilter(p){
-  return filter === 'all' ||
-    (filter === 'withLocation' && p.location) ||
-    (filter === 'withoutLocation' && !p.location) ||
-    (filter === 'withShelf' && p.shelf) ||
-    (filter === 'withoutShelf' && !p.shelf);
-}
-function score(p, q){
-  if(!q) return 1;
-  q = q.toLowerCase(); let s = 0;
-  const code = (p.code || '').toLowerCase(), desc=(p.description||'').toLowerCase();
-  if(code === q) s += 250;
-  if(code.startsWith(q)) s += 140;
-  if(code.includes(q)) s += 80;
-  if((p.barcode||'').toLowerCase().includes(q)) s += 75;
-  if((p.location||'').toLowerCase().includes(q)) s += 55;
-  if((p.shelf||'').toLowerCase().includes(q)) s += 55;
-  if(desc.includes(q)) s += 35;
-  if(p.searchText.includes(q)) s += 12;
-  return s;
-}
-function runSearch(){
-  const q = query.trim().toLowerCase();
-  let arr = data.filter(p => passesFilter(p));
-  if(q){ arr = arr.map(p => ({...p, _score: score(p,q)})).filter(p => p._score > 0).sort((a,b)=>b._score-a._score || a.code.localeCompare(b.code)); }
-  results = arr.slice(0, 60);
-  selected = results[0] || null;
-  renderFeatured(); renderSuggestions(); renderResults(); renderMiniStats();
-}
-function renderFeatured(){
-  const el = $('featured');
-  if(!selected){
-    el.className = 'featured empty-state';
-    el.innerHTML = `<div class="empty-copy"><span class="small-gold">No result</span><h2>Nenhum item encontrado</h2><p>Tente digitar menos caracteres, barcode, location ou shelf.</p></div>`;
-    return;
-  }
-  const p = selected;
-  el.className = 'featured';
-  el.innerHTML = `<div class="product-focus">
-    <div class="product-main">
-      <span class="small-gold">Best match</span>
-      <h2 class="product-code">${highlight(p.code)}</h2>
-      <p class="product-name">${highlight(p.description || p.category || 'No description available')}</p>
-      <div class="product-tags">
-        <span class="tag">Barcode: ${esc(p.barcode)}</span>
-        <span class="tag">Stock: ${esc(p.availableStock)}</span>
-        <span class="tag">Status: ${esc(p.stockingStatus || p.shelfStatus)}</span>
-        <span class="tag">Section: ${esc(p.section)}</span>
-      </div>
-    </div>
-    <div class="location-board">
-      <div class="big-location ${p.location ? '' : 'missing'}"><span>Location</span><strong>${highlight(p.location || 'NO LOCATION')}</strong></div>
-      <div class="big-location ${p.shelf ? '' : 'missing'}"><span>Shelf</span><strong>${highlight(p.shelf || 'NO SHELF')}</strong></div>
-      <div class="copy-grid">
-        <button onclick="copyText('${clean(p.code)}')">Copy Code</button>
-        <button onclick="copyText('${clean(p.location)}')">Copy Loc</button>
-        <button onclick="copyText('${clean(p.shelf)}')">Copy Shelf</button>
-        <button class="details-btn" onclick="openDetail(${p.id})">Full Details</button>
-      </div>
-    </div>
-  </div>`;
-}
-function renderSuggestions(){
-  const el = $('suggestions');
-  const q = query.trim();
-  if(!q || results.length === 0){ el.classList.add('hidden'); el.innerHTML = ''; return; }
-  el.classList.remove('hidden');
-  el.innerHTML = results.slice(0, 8).map((p, idx) => `<div class="suggestion ${idx===0?'active':''}" onclick="selectProduct(${p.id}, true)">
-    <div><b>${highlight(p.code)}</b><small>${highlight(p.description || p.category || 'No description')}</small></div>
-    <span class="sug-loc ${p.location ? '' : 'bad'}">${esc(p.location || 'NO LOC')}</span>
-    <span class="sug-shelf ${p.shelf ? '' : 'bad'}">${esc(p.shelf || 'NO SHELF')}</span>
-  </div>`).join('');
-}
-function renderResults(){
-  $('results').innerHTML = results.slice(1, 25).map(p => `<article class="card" onclick="selectProduct(${p.id}, true)">
-    <div class="card-code">${highlight(p.code)}</div>
-    <p class="card-name">${highlight(p.description || p.category || 'No description')}</p>
-    <div class="card-loc">
-      <div><span>Location</span><strong class="${p.location ? '' : 'bad'}">${highlight(p.location || 'NO LOCATION')}</strong></div>
-      <div><span>Shelf</span><strong class="${p.shelf ? '' : 'bad'}">${highlight(p.shelf || 'NO SHELF')}</strong></div>
-    </div>
-  </article>`).join('');
-}
-function renderMiniStats(){
-  $('totalCount').textContent = data.length.toLocaleString();
-  $('resultCount').textContent = results.length.toLocaleString();
-  $('recentChip').textContent = getRecent()[0] || '—';
-}
-function selectProduct(id, addToRecent=false){
-  selected = data.find(p => p.id === id);
-  if(selected){ if(addToRecent) addRecent(selected.code); renderFeatured(); $('suggestions').classList.add('hidden'); window.scrollTo({top:0, behavior:'smooth'}); }
-}
-function openDetail(id){
-  const p = data.find(x => x.id === id); if(!p) return;
-  const fields = [
-    ['Product Code', p.code], ['Description', p.description], ['Location', p.location], ['Shelf', p.shelf], ['Barcode', p.barcode],
-    ['Available Stock', p.availableStock], ['Category', p.category], ['Kit Components', p.kitComponents], ['Stocking Status', p.stockingStatus],
-    ['Shelf Qty', p.shelfQty], ['Section', p.section], ['Shelf Status', p.shelfStatus], ['Street', p.street], ['Building', p.building], ['Level', p.level], ['Side', p.side], ['Obs', p.obs]
-  ];
-  $('detailContent').innerHTML = `<span class="small-gold">Full product data</span><h2 class="product-code">${esc(p.code)}</h2><p class="product-name">${esc(p.description || p.category || '')}</p><div class="detail-grid">${fields.map(([k,v])=>`<div class="detail-cell"><span>${esc(k)}</span><strong>${esc(v)}</strong></div>`).join('')}</div>`;
-  $('detailDialog').showModal();
-}
-$('searchInput').addEventListener('input', e => { query = e.target.value; runSearch(); });
-$('searchInput').addEventListener('keydown', e => { if(e.key === 'Enter' && selected){ addRecent(selected.code); $('suggestions').classList.add('hidden'); } });
-$('clearBtn').addEventListener('click', () => { query=''; $('searchInput').value=''; runSearch(); $('searchInput').focus(); });
-document.querySelectorAll('.pill').forEach(btn => btn.addEventListener('click', () => { document.querySelectorAll('.pill').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); filter = btn.dataset.filter; runSearch(); }));
-$('closeDialog').addEventListener('click', () => $('detailDialog').close());
-document.addEventListener('click', (e) => { if(!e.target.closest('.search-card')) $('suggestions').classList.add('hidden'); });
-runSearch();
+const $ = id => document.getElementById(id);
+const raw = window.PARISI_DATA || [];
+const DATA = raw.map((p,i)=>({
+  ...p,
+  id:i,
+  code:String(p.code||p.Product||p.CODE||'').trim(),
+  description:String(p.description||p.name||p.category||'').trim(),
+  location:cleanLocation(p.location),
+  shelf:String(p.shelf||'').trim().toUpperCase(),
+  stock:String(p.availableStock||p.stock||p.qty||'').trim(),
+  status:String(p.stockingStatus||p.shelfStatus||'').trim(),
+  barcode:String(p.barcode||'').trim()
+})).map(p=>({...p, search:[p.code,p.description,p.location,p.shelf,p.stock,p.status,p.barcode,p.category].join(' ').toLowerCase(), norm:normalizeCode(p.code)}));
+let query='', mode='search', results=[], selected=null, cameraStream=null, deferredPrompt=null;
+const LS_BACK='parisi_os_backstock_v1', LS_PICK='parisi_os_picking_v1', LS_FAV='parisi_os_favs_v1', LS_REC='parisi_os_recent_v1';
+function cleanLocation(v){let s=String(v||'').toUpperCase().trim(); if(!s)return ''; return s.replace('/NSW/','').replace('NSW/','').replaceAll('/','').replaceAll(' ','').replace(/[.-]/g,'');}
+function normalizeCode(s){return String(s||'').toUpperCase().replace(/\s+/g,'').replace(/[–—]/g,'-').replace(/[;,]/g,'.').replace(/O(?=\d)/g,'0').replace(/(?<=\d)O/g,'0').replace(/I(?=\d)/g,'1').replace(/[^A-Z0-9.\-\/]/g,'');}
+function esc(s){return String(s??'').replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));}
+function fmt(s){return String(s||'').trim()||'—'}
+function toast(t){const el=$('toast'); el.textContent=t; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),1500)}
+function copy(t){navigator.clipboard?.writeText(String(t||'')); toast('Copied: '+fmt(t));}
+function storeGet(k){try{return JSON.parse(localStorage.getItem(k))||[]}catch{return[]}}
+function storeSet(k,v){localStorage.setItem(k,JSON.stringify(v)); renderWorkPanel(); renderStats();}
+function score(p,q){if(!q)return 1; const l=q.toLowerCase(), n=normalizeCode(q); let s=0; if(p.norm===n)s+=500; if(p.norm.startsWith(n))s+=250; if(p.norm.includes(n))s+=160; if(p.code.toLowerCase().includes(l))s+=120; if(p.description.toLowerCase().includes(l))s+=70; if(p.location.toLowerCase().includes(l))s+=130; if(p.shelf.toLowerCase().includes(l))s+=110; if(p.barcode.toLowerCase().includes(l))s+=100; if(p.search.includes(l))s+=20; return s}
+function highlight(txt){const safe=esc(fmt(txt)); const q=query.trim(); if(!q)return safe; const re=q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); try{return safe.replace(new RegExp('('+re+')','ig'),'<mark>$1</mark>')}catch{return safe}}
+function search(){const q=query.trim(); let arr=DATA; if(q){arr=DATA.map(p=>({...p,_score:score(p,q)})).filter(p=>p._score>0).sort((a,b)=>b._score-a._score||a.code.localeCompare(b.code));} results=arr.slice(0,80); selected=results[0]||null; renderSuggestions(); renderPrimary(); renderResults(); renderStats(); saveRecent(q);}
+function renderSuggestions(){const box=$('suggestions'); if(query.trim().length<1 || !results.length){box.classList.add('hidden'); box.innerHTML=''; return} box.classList.remove('hidden'); box.innerHTML=results.slice(0,9).map(p=>`<div class="suggestion" data-id="${p.id}"><div><strong>${highlight(p.code)}</strong><br><small>${highlight(p.description||p.category)}</small></div><span class="pill-loc">${esc(fmt(p.location))}</span><span class="pill-shelf">${esc(fmt(p.shelf))}</span></div>`).join(''); box.querySelectorAll('.suggestion').forEach(el=>el.onclick=()=>select(+el.dataset.id));}
+function renderPrimary(){const el=$('primaryResult'); if(!selected){el.className='primary-result empty'; el.innerHTML='<div class="empty-copy"><p>No item found.</p><small>Try fewer characters or OCR.</small></div>'; return} const p=selected; el.className='primary-result'; el.innerHTML=`<div class="result-top"><div><h2 class="code-title">${highlight(p.code)}</h2><p class="desc">${highlight(p.description||p.category)}</p><div class="badges"><span class="badge ${p.location?'ok':'bad'}">${p.location?'LOCATION OK':'NO LOCATION'}</span><span class="badge ${p.shelf?'ok':'bad'}">${p.shelf?'SHELF OK':'NO SHELF'}</span><span class="badge">${esc(fmt(p.status))}</span></div></div><button class="action-btn" id="addWorkBtn">+ Add to ${modeLabel()}</button></div><div class="big-loc-grid"><div class="big-box ${p.location?'':'missing'}"><span>LOCATION</span><strong>${highlight(p.location||'NO LOC')}</strong><button class="copy-mini" onclick="copy('${esc(p.location)}')">Copy</button></div><div class="big-box ${p.shelf?'':'missing'}"><span>SHELF</span><strong>${highlight(p.shelf||'NO SHELF')}</strong><button class="copy-mini" onclick="copy('${esc(p.shelf)}')">Copy</button></div></div><div class="info-strip"><div><span>PRODUCT</span><b>${highlight(p.description||p.category)}</b></div><div><span>STOCK</span><b>${esc(fmt(p.stock))}</b></div><div><span>BARCODE</span><b>${esc(fmt(p.barcode))}</b></div><div><span>STATUS</span><b>${esc(fmt(p.status))}</b></div></div><div class="action-row"><button class="action-btn" onclick="copy('${esc(p.code)}')">Copy Code</button><button class="action-btn" onclick="toggleFav(${p.id})">Favorite</button><button class="action-btn" onclick="addCurrentToWork()">Add Current</button></div>`; $('addWorkBtn').onclick=addCurrentToWork;}
+function renderResults(){$('resultsGrid').innerHTML=results.slice(1,19).map(p=>`<article class="result-card" data-id="${p.id}"><h3>${highlight(p.code)}</h3><p>${highlight(p.description||p.category)}</p><div class="mini-grid"><div><span>LOCATION</span><b>${esc(fmt(p.location))}</b></div><div><span>SHELF</span><b>${esc(fmt(p.shelf))}</b></div></div></article>`).join(''); document.querySelectorAll('.result-card').forEach(c=>c.onclick=()=>select(+c.dataset.id));}
+function select(id){const p=DATA.find(x=>x.id===id); if(!p)return; selected=p; query=p.code; $('searchInput').value=p.code; $('suggestions').classList.add('hidden'); renderPrimary(); renderResults(); saveRecent(p.code); if(mode==='receiving'||mode==='backstock') addToWork(p);}
+function modeLabel(){return ({search:'Work List',backstock:'Back to Stock',picking:'Picking',stocktake:'Stocktake',receiving:'Receiving'})[mode]}
+function currentKey(){return mode==='picking'?LS_PICK:LS_BACK}
+function addCurrentToWork(){if(selected)addToWork(selected)}
+function addToWork(p){const k=currentKey(); const list=storeGet(k); const row={id:p.id,code:p.code,description:p.description,location:p.location,shelf:p.shelf,stock:p.stock,time:new Date().toLocaleTimeString()}; if(!list.some(x=>x.code===row.code && x.time===row.time)) storeSet(k,[row,...list].slice(0,400)); toast('Added: '+p.code)}
+function removeWork(k,i){const list=storeGet(k); list.splice(i,1); storeSet(k,list)}
+function sortLoc(a){const s=a.location||'ZZZ999'; const m=s.match(/^([A-Z]+)(\d+)/); return m?[m[1],String(m[2]).padStart(4,'0')].join(''):s}
+function grouped(list){const sorted=[...list].sort((a,b)=>sortLoc(a).localeCompare(sortLoc(b))||a.code.localeCompare(b.code)); return sorted.reduce((acc,x)=>{const key=x.location||'NO LOCATION'; (acc[key] ||= []).push(x); return acc},{})}
+function renderWorkPanel(){const el=$('workPanel'); if(mode==='search'){el.classList.add('hidden'); return} el.classList.remove('hidden'); const k=currentKey(), list=storeGet(k), groups=grouped(list); const title=modeLabel(); el.innerHTML=`<div class="panel-head"><div><h2>${title}</h2><p>${modeHelp()}</p></div><div><button class="ghost" id="clearWork">Clear</button><button class="gold-btn" id="exportWork">Export</button></div></div>${!list.length?'<p class="status-line">No items yet. Search or OCR scan products to build the list.</p>':Object.entries(groups).map(([loc,items])=>`<div class="route-group"><div class="route-head"><span>${esc(loc)}</span><span>${items.length} item(s)</span></div>${items.map((p,i)=>`<div class="route-item"><div><b>${esc(p.code)}</b><p>${esc(p.description)} · Shelf ${esc(fmt(p.shelf))} · ${esc(p.time||'')}</p></div><button class="ghost" onclick="removeWork('${k}',${list.indexOf(p)})">Done</button></div>`).join('')}</div>`).join('')}`; $('clearWork').onclick=()=>storeSet(k,[]); $('exportWork').onclick=()=>exportList(list,title.replaceAll(' ','-').toLowerCase()+'.csv');}
+function modeHelp(){return {backstock:'Scan multiple items. The system groups them by location to reduce walking.',picking:'Build a picking route sorted by warehouse location.',stocktake:'Scan items while checking stock and location.',receiving:'Scan products and instantly see where they go.'}[mode]||''}
+function exportList(list,name){const csv=['Code,Description,Location,Shelf,Stock,Time',...list.map(p=>[p.code,p.description,p.location,p.shelf,p.stock,p.time].map(x=>'"'+String(x||'').replaceAll('"','""')+'"').join(','))].join('\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download=name; a.click();}
+function toggleFav(id){const fav=storeGet(LS_FAV); const p=DATA.find(x=>x.id===id); if(!p)return; const i=fav.findIndex(x=>x.code===p.code); if(i>=0){fav.splice(i,1); toast('Removed favorite')}else{fav.unshift({code:p.code,description:p.description,location:p.location,shelf:p.shelf}); toast('Favorite saved')} storeSet(LS_FAV,fav.slice(0,40));}
+function saveRecent(q){if(!q||q.length<2)return; let rec=storeGet(LS_REC).filter(x=>x!==q); rec.unshift(q); localStorage.setItem(LS_REC,JSON.stringify(rec.slice(0,12)));}
+function renderStats(){$('totalProducts').textContent=DATA.length.toLocaleString(); $('withLocation').textContent=DATA.filter(p=>p.location).length.toLocaleString(); $('noLocation').textContent=DATA.filter(p=>!p.location).length.toLocaleString(); $('workCount').textContent=(storeGet(LS_BACK).length+storeGet(LS_PICK).length).toLocaleString();}
+function bind(){ $('searchInput').addEventListener('input',e=>{query=e.target.value; search()}); $('clearBtn').onclick=()=>{query=''; $('searchInput').value=''; search(); $('searchInput').focus()}; document.querySelectorAll('.mode').forEach(b=>b.onclick=()=>{mode=b.dataset.mode; document.querySelectorAll('.mode').forEach(x=>x.classList.toggle('active',x===b)); renderPrimary(); renderWorkPanel();}); $('ocrBtn').onclick=startOCR; $('closeOcr').onclick=()=>{$('ocrDialog').close(); stopOCR()}; $('readTextBtn').onclick=captureOCR; window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;$('installBtn').classList.remove('hidden')}); $('installBtn').onclick=()=>deferredPrompt?.prompt(); if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});}
+async function startOCR(){ $('ocrDialog').showModal(); $('ocrStatus').textContent='Opening camera...'; try{cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}}); $('camera').srcObject=cameraStream; $('ocrStatus').textContent='Camera ready. Center the code and tap Read Text.'}catch(e){$('ocrStatus').textContent='Camera error: '+e.message}}
+function stopOCR(){if(cameraStream){cameraStream.getTracks().forEach(t=>t.stop());cameraStream=null} $('camera').srcObject=null}
+async function captureOCR(){const video=$('camera'), canvas=$('captureCanvas'), status=$('ocrStatus'); if(!video.videoWidth){status.textContent='Camera not ready.';return} canvas.width=video.videoWidth; canvas.height=video.videoHeight; canvas.getContext('2d').drawImage(video,0,0); status.textContent='Reading text...'; try{const res=await Tesseract.recognize(canvas,'eng',{logger:m=>{if(m.status)status.textContent=`OCR: ${m.status} ${m.progress?Math.round(m.progress*100)+'%':''}`}}); const candidates=extractCandidates(res.data.text); renderOcr(candidates); status.textContent=candidates.length?'Choose the correct code.':'No product code found. Try closer and brighter.'}catch(e){status.textContent='OCR error: '+e.message}}
+function extractCandidates(text){const raw=String(text||'').toUpperCase().replace(/\s+/g,' '); let matches=raw.match(/[A-Z0-9]{1,5}[.\-][A-Z0-9.\-\/]{3,}/g)||[]; matches=matches.map(normalizeCode); const known=[]; for(const m of matches){const hit=DATA.find(p=>p.norm===m)||DATA.find(p=>p.norm.includes(m)||m.includes(p.norm)); if(hit&&!known.some(x=>x.id===hit.id))known.push(hit)} return known.slice(0,10)}
+function renderOcr(list){const box=$('ocrCandidates'); box.innerHTML=list.map(p=>`<div class="ocr-candidate"><div><b>${esc(p.code)}</b><br><small>${esc(p.description)} · ${esc(fmt(p.location))} · ${esc(fmt(p.shelf))}</small></div><button class="gold-btn" data-id="${p.id}">Use</button></div>`).join(''); box.querySelectorAll('button').forEach(b=>b.onclick=()=>{select(+b.dataset.id); $('ocrDialog').close(); stopOCR()});}
+bind(); search(); renderWorkPanel(); renderStats();

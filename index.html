@@ -2,67 +2,77 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Parisi Tapware Finder</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#080706" />
+  <title>Parisi Warehouse OS</title>
+  <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="ambient ambient-one"></div>
-  <div class="ambient ambient-two"></div>
-
-  <main class="shell">
-    <section class="hero">
-      <div class="brand-block">
-        <div class="brand-line"></div>
-        <p class="eyebrow">PARISI</p>
-        <h1>BATHWARE</h1>
-        <p class="subline">Tapware location system</p>
+  <div class="lux-bg"><span></span><span></span><span></span></div>
+  <main class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="monogram">P</div>
+        <div><strong>PARISI</strong><small>WAREHOUSE OS</small></div>
       </div>
+      <button id="installBtn" class="icon-btn hidden">Install</button>
+    </header>
 
-      <div class="search-card">
-        <div class="search-bar">
-          <span class="icon">⌕</span>
-          <input id="searchInput" type="search" autocomplete="off" placeholder="Digite o código do produto" autofocus />
-          <button id="clearBtn" aria-label="Clear search">×</button>
+    <section class="hero-card">
+      <p class="kicker">SCAN · LOCATE · RETRIEVE</p>
+      <h1>Find. Sort. Store.</h1>
+      <p class="hero-sub">Luxury-grade warehouse search for Tapware operations.</p>
+      <div class="search-zone">
+        <div class="search-box">
+          <span class="search-icon">⌕</span>
+          <input id="searchInput" autocomplete="off" inputmode="search" placeholder="Search code, name, location or shelf" />
+          <button id="clearBtn" title="Clear">×</button>
         </div>
-        <div id="suggestions" class="suggestions hidden"></div>
+        <button id="ocrBtn" class="gold-btn">OCR</button>
       </div>
+      <div id="suggestions" class="suggestions hidden"></div>
     </section>
 
-    <section id="featured" class="featured empty-state">
-      <div class="empty-copy">
-        <span class="small-gold">Ready</span>
-        <h2>Procure um item</h2>
-        <p>Digite código, nome, barcode, location ou shelf. A localização principal aparece aqui imediatamente.</p>
-      </div>
+    <section id="primaryResult" class="primary-result empty">
+      <div class="empty-copy"><p>Start typing or scan text.</p><small>Location and shelf will appear here immediately.</small></div>
     </section>
 
-    <section class="quick-actions">
-      <button class="pill active" data-filter="all">All</button>
-      <button class="pill" data-filter="withLocation">Location OK</button>
-      <button class="pill" data-filter="withoutLocation">No Location</button>
-      <button class="pill" data-filter="withShelf">Shelf OK</button>
-      <button class="pill" data-filter="withoutShelf">No Shelf</button>
+    <nav class="mode-tabs">
+      <button class="mode active" data-mode="search">Search</button>
+      <button class="mode" data-mode="backstock">Back to Stock</button>
+      <button class="mode" data-mode="picking">Picking</button>
+      <button class="mode" data-mode="stocktake">Stocktake</button>
+      <button class="mode" data-mode="receiving">Receiving</button>
+    </nav>
+
+    <section class="metrics">
+      <div><b id="totalProducts">0</b><span>Products</span></div>
+      <div><b id="withLocation">0</b><span>With location</span></div>
+      <div><b id="noLocation">0</b><span>No location</span></div>
+      <div><b id="workCount">0</b><span>Work list</span></div>
     </section>
 
-    <section class="info-row">
-      <div class="mini-panel"><span>Total</span><strong id="totalCount">—</strong></div>
-      <div class="mini-panel"><span>Results</span><strong id="resultCount">—</strong></div>
-      <div class="mini-panel"><span>Recent</span><strong id="recentChip">—</strong></div>
-    </section>
-
-    <section id="results" class="results"></section>
+    <section id="workPanel" class="work-panel hidden"></section>
+    <section id="resultsGrid" class="results-grid"></section>
   </main>
 
-  <dialog id="detailDialog">
-    <div class="modal">
-      <button id="closeDialog" class="close">×</button>
-      <div id="detailContent"></div>
+  <dialog id="ocrDialog" class="modal">
+    <div class="modal-card">
+      <button id="closeOcr" class="close-modal">×</button>
+      <h2>OCR Text Scan</h2>
+      <p>Point the camera at the printed item code.</p>
+      <video id="camera" playsinline autoplay muted></video>
+      <canvas id="captureCanvas" class="hidden"></canvas>
+      <button id="readTextBtn" class="gold-btn wide">Read Text</button>
+      <p id="ocrStatus" class="status-line">Camera closed.</p>
+      <div id="ocrCandidates" class="ocr-candidates"></div>
     </div>
   </dialog>
 
   <div id="toast"></div>
   <script src="data.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
