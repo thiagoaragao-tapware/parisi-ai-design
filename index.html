@@ -3,82 +3,64 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Parisi Tapware Finder 2.0</title>
+  <title>Parisi Tapware Finder</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="noise"></div>
-  <aside class="rail">
-    <div class="logo">P</div>
-    <button class="rail-btn active" data-view="search" title="Search">⌕</button>
-    <button class="rail-btn" data-view="favorites" title="Favorites">★</button>
-    <button class="rail-btn" data-view="audit" title="Audit">!</button>
-    <button id="themeBtn" class="rail-btn" title="Theme">☾</button>
-  </aside>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
 
-  <main class="app">
-    <section class="hero glass">
-      <div class="hero-copy">
-        <p class="kicker">Parisi Warehouse System</p>
-        <h1>Tapware Finder <span>2.0</span></h1>
-        <p class="sub">Fast product search for code, name, barcode, location and shelf. Built to replace spreadsheet hunting on the warehouse floor.</p>
+  <main class="shell">
+    <section class="hero">
+      <div class="brand-block">
+        <div class="brand-line"></div>
+        <p class="eyebrow">PARISI</p>
+        <h1>BATHWARE</h1>
+        <p class="subline">Tapware location system</p>
       </div>
-      <div class="hero-card">
-        <p>System Status</p>
-        <strong id="healthScore">—</strong>
-        <span>Data quality score</span>
-      </div>
-    </section>
 
-    <section class="command glass">
-      <div class="searchbox">
-        <span class="lens">⌕</span>
-        <input id="searchInput" type="search" autocomplete="off" placeholder="Search product code, description, barcode, /NSW/C3.04 or C43M" autofocus />
-        <button id="clearSearch" class="mini">Clear</button>
-      </div>
-      <div class="actions">
-        <button id="scanBtn">Camera Scan</button>
-        <button id="exportBtn">Export Results</button>
-      </div>
-      <div id="scanner" class="scanner hidden">
-        <video id="video" playsinline></video>
-        <div class="scanline"></div>
-        <button id="stopScan" class="mini danger">Stop scanner</button>
-        <p>Point the camera at a barcode. If your browser blocks camera access, use manual search.</p>
-      </div>
-    </section>
-
-    <section class="stats" id="stats"></section>
-
-    <section class="filters glass">
-      <button class="filter active" data-filter="all">All</button>
-      <button class="filter" data-filter="withLocation">Location OK</button>
-      <button class="filter" data-filter="withoutLocation">No Location</button>
-      <button class="filter" data-filter="withShelf">Shelf OK</button>
-      <button class="filter" data-filter="withoutShelf">No Shelf</button>
-      <button class="filter" data-filter="inStock">In Stock</button>
-      <button class="filter" data-filter="discontinued">Discontinued</button>
-    </section>
-
-    <section class="split">
-      <div class="maincol">
-        <div class="section-head">
-          <div><h2 id="resultsTitle">Search results</h2><p id="resultsMeta">Type to start searching.</p></div>
-          <div class="viewtoggle"><button id="cardsView" class="active">Cards</button><button id="tableViewBtn">Table</button></div>
+      <div class="search-card">
+        <div class="search-bar">
+          <span class="icon">⌕</span>
+          <input id="searchInput" type="search" autocomplete="off" placeholder="Digite o código do produto" autofocus />
+          <button id="clearBtn" aria-label="Clear search">×</button>
         </div>
-        <div id="results" class="results"></div>
-        <div id="tableWrap" class="table-wrap hidden"><table><thead><tr><th>Code</th><th>Description</th><th>Location</th><th>Shelf</th><th>Stock</th><th>Barcode</th><th>Status</th></tr></thead><tbody id="tableBody"></tbody></table></div>
+        <div id="suggestions" class="suggestions hidden"></div>
       </div>
-
-      <aside class="sidecol">
-        <div class="panel glass"><div class="panel-head"><h3>Recent</h3><button id="clearRecent">Clear</button></div><div id="recentList" class="tags"></div></div>
-        <div class="panel glass"><div class="panel-head"><h3>Favorites</h3><button id="clearFavs">Clear</button></div><div id="favList" class="tags"></div></div>
-        <div class="panel glass"><h3>Warehouse Warnings</h3><div id="warningList" class="warnings"></div></div>
-      </aside>
     </section>
+
+    <section id="featured" class="featured empty-state">
+      <div class="empty-copy">
+        <span class="small-gold">Ready</span>
+        <h2>Procure um item</h2>
+        <p>Digite código, nome, barcode, location ou shelf. A localização principal aparece aqui imediatamente.</p>
+      </div>
+    </section>
+
+    <section class="quick-actions">
+      <button class="pill active" data-filter="all">All</button>
+      <button class="pill" data-filter="withLocation">Location OK</button>
+      <button class="pill" data-filter="withoutLocation">No Location</button>
+      <button class="pill" data-filter="withShelf">Shelf OK</button>
+      <button class="pill" data-filter="withoutShelf">No Shelf</button>
+    </section>
+
+    <section class="info-row">
+      <div class="mini-panel"><span>Total</span><strong id="totalCount">—</strong></div>
+      <div class="mini-panel"><span>Results</span><strong id="resultCount">—</strong></div>
+      <div class="mini-panel"><span>Recent</span><strong id="recentChip">—</strong></div>
+    </section>
+
+    <section id="results" class="results"></section>
   </main>
 
-  <dialog id="detailDialog"><div class="modal"><button id="closeDialog" class="close">×</button><div id="detail"></div></div></dialog>
+  <dialog id="detailDialog">
+    <div class="modal">
+      <button id="closeDialog" class="close">×</button>
+      <div id="detailContent"></div>
+    </div>
+  </dialog>
+
   <div id="toast"></div>
   <script src="data.js"></script>
   <script src="script.js"></script>
